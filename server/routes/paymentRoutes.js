@@ -1,49 +1,53 @@
 import express from "express";
-import Stripe from "stripe";
+import Razorpay from "razorpay";
 import Payment from "../models/Payment.js";
 
 const router = express.Router();
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Create a Payment Intent (for subscription or one-time payment)
-router.post("/create-payment-intent", async (req, res) => {
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+// Create Payment Order
+router.post("/create-order", async (req, res) => {
   try {
-    const { amount } = req.body; // amount in cents
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: "usd",
-      payment_method_types: ["card"],
+    const { amount, plan } = req.body;
+    const order = await razorpay.orders.create({
+      amount: amount * 100, // Convert to paisa
+      currency: "INR",
+      receipt: `receipt_${Date.now()}`,
     });
 
-    res.json({ clientSecret: paymentIntent.client_secret });
+    const payment = new Payment({
+      user: req.user.id,
+      plan,
+      amount,
+      status: "pending",
+    });
+    await payment.save();
+
+    res.json({ orderId: order.id });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Payment Error:", error);
+    res.status(500).json({ error: "Payment creation failed" });
   }
 });
 
-// Confirm Payment and Save Payment Info
-router.post("/confirm-payment", async (req, res) => {
-  const { paymentIntentId, userId, plan, amount } = req.body;
-
+// Verify Payment
+router.post("/verify", async (req, res) => {
+  const { paymentId } = req.body;
   try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const payment = await Payment.findOne({ paymentId });
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
 
-    if (paymentIntent.status === "succeeded") {
-      // Save payment information to the database
-      const payment = new Payment({
-        user: userId,
-        plan,
-        amount,
-        status: "completed",
-      });
+    payment.status = "completed";
+    await payment.save();
 
-      await payment.save();
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ error: "Payment not successful" });
-    }
+    res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Payment Verification Error:", error);
+    res.status(500).json({ error: "Payment verification failed" });
   }
 });
 
