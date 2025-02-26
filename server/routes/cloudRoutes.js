@@ -1,33 +1,45 @@
 import express from "express";
 import multer from "multer";
-import { uploadFileToS3 } from "../utils/cloudStorage.js";
-import Resume from "../models/Resume.js";
+import cloudinary from "cloudinary";
+import { Resume } from "../models/Resume.js";
 
 const router = express.Router();
+
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Endpoint to upload resume to cloud (AWS S3)
-router.post("/upload", upload.single("resume"), async (req, res) => {
+router.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    const { file } = req;
-    const fileName = `${Date.now()}-${file.originalname}`;
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-    const fileData = await uploadFileToS3(file.buffer, fileName);
+    const result = await cloudinary.v2.uploader.upload_stream(
+      {
+        resource_type: "auto",
+      },
+      async (error, result) => {
+        if (error) return res.status(500).json({ error: "Upload failed" });
 
-    // Save file URL to the database
-    const newResume = new Resume({
-      user: req.body.userId, // Assuming the userId is passed in the body
-      content: { url: fileData.Location },
-      parsedData: {},
-    });
+        const resume = new Resume({
+          user: req.user.id,
+          content: {},
+          cloudinaryUrl: result.secure_url,
+        });
+        await resume.save();
 
-    await newResume.save();
-    res.json({
-      message: "File uploaded successfully",
-      fileData: fileData.Location,
-    });
+        res.json({ success: true, url: result.secure_url });
+      }
+    );
+
+    result.end(file.buffer);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Cloudinary Upload Error:", error);
+    res.status(500).json({ error: "Upload failed" });
   }
 });
 

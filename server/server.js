@@ -1,5 +1,3 @@
-// server/server.js
-
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -11,6 +9,7 @@ import jobRoutes from "./routes/jobRoutes.js";
 import optimizationRoutes from "./routes/optimizationRoutes.js";
 import recruiterRoutes from "./routes/recruiterRoutes.js";
 import cloudRoutes from "./routes/cloudRoutes.js";
+import linkedinRoutes from "./routes/linkedinRoutes.js";
 
 // Load environment variables
 dotenv.config();
@@ -39,6 +38,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/optimize", optimizationRoutes);
 app.use("/api/recruiter", recruiterRoutes);
 app.use("/api/cloud", cloudRoutes);
+app.use("/api/linkedin", linkedinRoutes);
 
 // Basic Route
 app.get("/", (req, res) => {
