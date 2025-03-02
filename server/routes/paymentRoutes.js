@@ -1,53 +1,41 @@
+// routes/paymentRoutes.js
 import express from "express";
 import Razorpay from "razorpay";
-import Payment from "../models/Payment.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const router = express.Router();
 
+// Ensure environment variables are loaded correctly
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+  throw new Error(
+    "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be defined in .env"
+  );
+}
+
+// Initialize Razorpay
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-// Create Payment Order
+// Create Order Route
 router.post("/create-order", async (req, res) => {
   try {
-    const { amount, plan } = req.body;
-    const order = await razorpay.orders.create({
-      amount: amount * 100, // Convert to paisa
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-    });
+    const { amount, currency, receipt } = req.body;
 
-    const payment = new Payment({
-      user: req.user.id,
-      plan,
-      amount,
-      status: "pending",
-    });
-    await payment.save();
+    const options = {
+      amount: amount * 100, // Convert to smallest currency unit (paise)
+      currency: currency || "INR",
+      receipt: receipt || `receipt_${Date.now()}`,
+    };
 
-    res.json({ orderId: order.id });
+    const order = await razorpay.orders.create(options);
+    res.status(201).json(order);
   } catch (error) {
-    console.error("Payment Error:", error);
-    res.status(500).json({ error: "Payment creation failed" });
-  }
-});
-
-// Verify Payment
-router.post("/verify", async (req, res) => {
-  const { paymentId } = req.body;
-  try {
-    const payment = await Payment.findOne({ paymentId });
-    if (!payment) return res.status(404).json({ error: "Payment not found" });
-
-    payment.status = "completed";
-    await payment.save();
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Payment Verification Error:", error);
-    res.status(500).json({ error: "Payment verification failed" });
+    console.error("Error creating Razorpay order:", error);
+    res.status(500).json({ error: "Failed to create order" });
   }
 });
 

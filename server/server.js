@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -21,14 +22,24 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 
+// Fix Mongoose deprecation warning
+mongoose.set("strictQuery", true);
+
 // MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("✅ MongoDB connected successfully");
+  } catch (error) {
+    console.error("❌ MongoDB connection error:", error);
+    process.exit(1);
+  }
+};
+
+connectDB();
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -46,6 +57,42 @@ app.get("/", (req, res) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+let currentPort = PORT;
+
+const startServer = () => {
+  const server = app.listen(currentPort, () => {
+    console.log(`🚀 Server running on http://localhost:${currentPort}`);
+  });
+
+  // Handle EADDRINUSE error
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `⚠️ Port ${currentPort} is already in use. Trying port ${
+          currentPort + 1
+        }...`
+      );
+      currentPort++;
+      startServer();
+    } else {
+      console.error("❌ Unexpected Error:", err);
+      process.exit(1);
+    }
+  });
+};
+
+startServer();
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("🛑 Graceful shutdown initiated");
+  await mongoose.disconnect();
+  console.log("✅ MongoDB disconnected");
+  process.exit(0);
+});
+
+// Catch unhandled promise rejections
+process.on("unhandledRejection", (error) => {
+  console.error("❌ Unhandled Rejection:", error);
+  process.exit(1);
 });
