@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import cloudinary from "cloudinary";
-import { Resume } from "../models/Resume.js";
+import  Resume  from "../models/Resume.js";
 
 const router = express.Router();
 
